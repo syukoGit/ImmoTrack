@@ -1,0 +1,23 @@
+{
+  "name": "@immotrack/test-utils",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./postgres": "./src/postgres/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@immotrack/application": "workspace:*",
+    "@immotrack/contracts": "workspace:*",
+    "@immotrack/domain": "workspace:*",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

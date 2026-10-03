@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "idempotencyKey": "2026-10-03:leboncoin:batch-001",
+  "runId": "0b9f6d0e-3c1a-4d8e-9a43-6f1d2c7b8a90",
+  "source": {
+    "code": "leboncoin",
+    "status": "SUCCESS"
+  },
+  "observedAt": "2026-10-03T06:12:00+02:00",
+  "listings": [
+    {
+      "sourceReference": "abc123",
+      "url": "https://www.leboncoin.fr/ad/ventes_immobilieres/abc123",
+      "title": "Appartement T2 41 m² proche gare",
+      "price": 92000,
+      "surfaceM2": 41,
+      "city": "Tours",
+      "postalCode": "37000",
+      "rawFacts": {
+        "rooms": 2,
+        "floor": 3,
+        "energyClass": "D"
+      }
+    }
+  ],
+  "errors": []
+}

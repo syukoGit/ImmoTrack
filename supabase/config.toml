@@ -1,0 +1,44 @@
+# Configuration du Supabase CLI pour le développement local (`supabase start`).
+# Les valeurs non précisées utilisent les défauts du CLI. Aucun secret ici : les clés locales
+# sont générées par le CLI et affichées par `supabase status`.
+
+project_id = "immotrack"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+jwt_expiry = 3600
+# Utilisateur administrateur unique : l'inscription publique est désactivée, le compte est créé
+# depuis Supabase Studio (Authentication > Users) puis déclaré dans ADMIN_EMAIL.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false

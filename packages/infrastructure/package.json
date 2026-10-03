@@ -1,0 +1,28 @@
+{
+  "name": "@immotrack/infrastructure",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@immotrack/application": "workspace:*",
+    "@immotrack/domain": "workspace:*",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0"
+  },
+  "devDependencies": {
+    "@immotrack/test-utils": "workspace:*",
+    "@types/pg": "^8.23.1"
+  }
+}

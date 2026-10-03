@@ -1,0 +1,13 @@
+{
+  "//": "Résolution des alias TypeScript pour dependency-cruiser (lint:architecture) uniquement.",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./apps/web/src/*"]
+    }
+  },
+  "include": ["apps/web/src/**/*"]
+}
