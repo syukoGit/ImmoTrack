@@ -1,0 +1,36 @@
+# Dépendances
+node_modules/
+.pnpm-store/
+
+# Builds et caches
+.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Tests
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# Environnement — ne jamais committer de secrets
+.env
+.env.*
+!.env.example
+
+# Supabase CLI
+supabase/.branches/
+supabase/.temp/
+
+# Divers
+.DS_Store
+*.log
+.vercel
+.idea/
+.vscode/*
+!.vscode/extensions.json

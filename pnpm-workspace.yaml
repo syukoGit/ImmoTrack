@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Les scripts d'installation des dépendances sont bloqués par défaut (pnpm 10) :
+# seules les dépendances listées ici sont autorisées à exécuter leurs scripts.
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - unrs-resolver
