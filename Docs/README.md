@@ -1,44 +1,41 @@
 # Documentation ImmoTrack
 
-## Cadrage en cours — reprise au 10 octobre 2026
+## État au 10 octobre 2026
 
-Les **100 décisions validées** lors de l’entretien sont enregistrées dans [Décisions et reprise de la spec V1](04_Decisions_et_reprise_spec_V1.md). Ce document complète les spécifications initiales et prévaut sur elles pour les points explicitement modifiés. La spec finale consolidée reste à rédiger.
+L'entretien de cadrage est allé jusqu'à **Q152, acceptée**. Les décisions des deux sessions sont consolidées ; aucune question posée ne reste en attente. Les documents initiaux sont réécrits autour du backend .NET et du frontend React TypeScript.
 
-**Le passage à l’architecture a été annoncé. Reprendre à la question 101, encore sans réponse : conserver la stack TypeScript / Next.js / Vercel / Supabase, ou la réexaminer ?** Continuer avec une seule question à la fois. Le document de reprise contient les choix détaillés, les évolutions de périmètre et les sujets restant à traiter. Les trois spécifications ci-dessous n’intègrent pas encore ces décisions.
+Cette révision est une **spec consolidée à relire**, accompagnée de conventions de réalisation identifiées et de preuves techniques restant à mener. Les choix utilisateur sont distingués des hypothèses de dimensionnement et des propositions ajoutées pour rendre le système implémentable.
 
-Les trois spécifications V1 décrivent le produit, son implémentation et son architecture. Les versions Markdown reprennent le contenu des documents Word datés du 3 octobre 2026, sans modification de fond. Les titres, listes, tableaux et exemples ont été adaptés au format Markdown.
+## Documents
 
-- [Spécification fonctionnelle](01_Specification_fonctionnelle_ImmoTrack_V1.md)
-- [Spécification technique](02_Specification_technique_ImmoTrack_V1.md)
-- [Spécification d’architecture](03_Specification_architecture_ImmoTrack_V1.md)
+| Document | Usage |
+| --- | --- |
+| [01 — Spécification fonctionnelle](01_Specification_fonctionnelle_ImmoTrack_V1.md) | Objectif, périmètre complet, parcours, données, simulations, scores et recette produit. |
+| [02 — Spécification technique](02_Specification_technique_ImmoTrack_V1.md) | Modèle persistant, contrats, tâches, idempotence, transactions, sécurité et vérification. |
+| [03 — Architecture](03_Specification_architecture_ImmoTrack_V1.md) | Composants, frontières hexagonales, modules, flux et déploiement. |
+| [04 — Décisions et reprise](04_Decisions_et_reprise_spec_V1.md) | Q1–152, réponses et révisions explicites ; référence pour reprendre sans refaire l'entretien. |
+| [05 — Calculs et cas de référence](05_Calculs_et_cas_de_reference_V1.md) | Formules, conventions proposées, exemples et limites de calcul. |
+| [06 — Faisabilité et réalisation](06_Faisabilite_et_realisation_V1.md) | Sources officielles, intégrations Work/API, chiffrage candidat, étapes et preuves restantes. |
 
-Les originaux restent dans `WIP/`, actuellement ignoré par Git. Les fichiers Markdown de ce dossier peuvent être versionnés. La spécification technique propose une future arborescence `docs/` en minuscules ; le nom existant `Docs/` a été conservé pour cette conversion.
+## Socle retenu
 
-## Premier avis
+- .NET en monolithe modulaire hexagonal, Clean Code ; React TypeScript.
+- PostgreSQL, EF Core pour écritures/migrations et lectures dédiées ; worker séparé, file persistante et outbox.
+- Keycloak, compte local avec MFA, BFF et jetons côté serveur.
+- Stockage privé compatible S3, identités techniques distinctes pour les intégrations.
+- Orchestration indépendante des environnements d'agents et des fournisseurs de modèles ; HTTP JSON versionné et adaptateurs MCP lorsque compatibles.
+- VPS Docker initial, plafond infrastructure 20 €/mois hors API, sauvegardes externes et déploiement manuel après contrôles.
 
-Le socle est cohérent : l’agent collecte les faits, l’application porte les décisions métier et les calculs. L’historisation, les hypothèses versionnées, l’idempotence et les erreurs corrélées répondent directement au besoin de rendre les recherches explicables. Les critères d’acceptation fonctionnels constituent un bon départ pour les tests.
+## Révisions importantes
 
-La V1 couvre néanmoins beaucoup de sujets : ingestion, rapprochement multi-source, calculs, scoring, suivi des recherches et plusieurs écrans. Avant de créer toute l’architecture proposée, il faut définir un premier parcours complet et préciser les règles qui déterminent son résultat.
+La priorité à ChatGPT Work et l'interdiction des API IA sont abandonnées. Plusieurs intégrations sont prévues dès la V1, avec capacités vérifiées séparément. Le socle Next.js/Vercel/Supabase n'est plus la cible.
 
-## Points à clarifier
+Les scores peuvent être provisoires : dimension inconnue notée conventionnellement 50/100, badge et part documentée visibles, classement commun avec les complets. Cela ne fabrique pas de données financières et ne lève pas les critères éliminatoires inconnus. Si toutes les dimensions actives manquent, le score est non calculable.
 
-1. **Premier parcours et périmètre.** Choisir le canal initial d’import, les données minimales et les écrans indispensables. Décider quels niveaux de déduplication et quelles règles de scoring sont nécessaires pour ce premier parcours.
-2. **Bien et annonce.** Les documents distinguent un bien de ses annonces sources, mais nomment le bien `Listing`. Clarifier le vocabulaire, les identifiants, les seuils de rapprochement, la validation des candidats et la possibilité d’annuler une fusion erronée. Une adresse et une surface proches ne suffisent pas toujours à identifier un logement dans un immeuble.
-3. **Échecs partiels et transactions.** La spécification technique prévoit une erreur de validation sans écriture métier, tandis que le résultat d’ingestion comprend des éléments rejetés. Définir séparément une enveloppe invalide, une annonce invalide dans un lot valide et une source en échec. Préciser ce qui est conservé, annulé et rejouable dans chaque cas.
-4. **Idempotence et concurrence.** Définir le périmètre et la durée de conservation d’une clé, le résultat d’une même clé avec un contenu différent, le traitement de deux requêtes simultanées et la reprise après interruption. Le rejeu doit couvrir aussi les snapshots, évaluations et compteurs.
-5. **Cycle de vie des recherches.** Définir qui crée et clôture le run, les statuts et transitions autorisés, le rôle des lots successifs, les sources attendues, les expirations et la relance d’une source. Le contrat fournit un `runId`, mais ne décrit pas encore ce cycle complet.
-6. **Provenance et corrections.** Définir la priorité entre observation, estimation et saisie utilisateur pour chaque champ. Une nouvelle ingestion doit-elle remplacer une correction manuelle ? Définir aussi le traitement des valeurs inconnues, qui doivent rester distinctes de zéro.
-7. **Calculs et scoring.** Fixer les formules, unités, périodes, assiettes, arrondis, frais financés, assurance et scénarios. Décrire les contributions au score, les données manquantes et les motifs de rejet. Ajouter des exemples chiffrés avec résultats attendus avant l’implémentation.
-8. **Accès et exploitation.** Définir comment le compte administrateur autorisé est identifié, les permissions du credential agent, les politiques RLS, les sauvegardes/restaurations et la rétention des payloads et logs. Une session authentifiée doit être associée à une autorisation explicite.
+Le scénario dégradé conserve le crédit central. Les dépenses supplémentaires affectent le coût et le besoin de réserve. Un revenu global d'immeuble reste la référence tant que le détail est incomplet ; un détail divergent nécessite validation avant remplacement.
 
-## Ordre de travail proposé
+## Prochaine étape
 
-Ces étapes sont une proposition de travail ; elles ne modifient pas les spécifications converties.
+Relire cette consolidation et réaliser la tranche de faisabilité T0 : intégration Work sur le compte cible, configurations API de référence et chiffrage/dimensionnement. Ne pas recommencer les Q1–152. Les paramètres propres à chaque recherche seront saisis dans l'application ; les conventions proposées du document 05 doivent être vérifiées sur les cas de recette.
 
-1. **Cadrer le premier parcours fonctionnel.** Décrire un import, la consultation du bien, une correction d’hypothèse et le résultat attendu. Définir le minimum livrable et les critères d’acceptation observables.
-2. **Stabiliser le vocabulaire et les règles de données.** Bien, annonce, observation, correction, évaluation, run et lot ; invariants, provenance et transitions.
-3. **Définir le contrat d’ingestion.** Requêtes/réponses et exemples de succès, rejet partiel, conflit d’idempotence, reprise et clôture de run.
-4. **Spécifier les calculs.** Formules et cas de référence, notamment achat comptant, taux nul, données manquantes et scénario dégradé.
-5. **Aligner technique et architecture.** Ajuster schéma, frontières, transactions et ADR aux décisions précédentes, puis démarrer une première tranche fonctionnelle testable.
-
-La prochaine étape recommandée est la première : rendre le parcours initial suffisamment précis pour décider quoi construire en premier.
+Cette consolidation est destinée à la branche WIP-spec. La branche de code existante fondée sur l'ancien socle devra être revue avant réutilisation ; elle ne valide pas l'architecture .NET décrite ici.

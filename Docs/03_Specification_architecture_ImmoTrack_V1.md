@@ -1,192 +1,147 @@
-# ImmoTrack V1
+# ImmoTrack V1 — Architecture
 
-## Spécification d’architecture
+Révision consolidée — 10 octobre 2026. Décisions Q101–128 et Q145–152.
 
-Architecture hexagonale / Clean Architecture et règles de dépendance
+## 1. Architecture retenue
 
-Version 1.0 — 3 octobre 2026
+Monolithe modulaire .NET en architecture hexagonale, frontend React TypeScript, API/BFF et worker séparés. PostgreSQL porte les données et la file durable ; Keycloak gère l'identité humaine ; les fichiers résident dans un stockage privé compatible S3. Le premier déploiement est un serveur privé Docker, avec sauvegardes externes. L'organisation reste portable vers des services managés.
 
-| Champ | Valeur |
-| --- | --- |
-| Style cible | Architecture hexagonale dans un monolithe modulaire. |
-| Priorité | Maintenabilité, testabilité, observabilité, faible coût d’exploitation. |
-| Vendor lock-in | Confiné aux adaptateurs : Supabase, Vercel et ChatGPT ne sont pas des dépendances du domaine. |
-| Évolution | Possibilité de remplacer l’ingestion ChatGPT, la DB ou l’hébergement sans casser les règles métier. |
+Les agents enrichissent les données. L'application reste seule responsable des calculs, critères, identités métier et décisions d'enregistrement. « Plusieurs modèles dès la V1 » signifie adaptateurs et intégrations effectivement testés, pas compatibilité universelle avec toute API ni mêmes capacités chez tous les agents.
 
-## 1. Vue d’ensemble
+## 2. Vue d'ensemble
 
-```text
-                         +---------------------------+
-                         |      ChatGPT Work / IA      |
-                         +-------------+-------------+
-                                       |
-                              Adapter entrant Agent
-                                       |
-+-------------------+       +---------v---------+       +-------------------+
-|  Navigateur admin | ----> |   Application     | ----> |  Ports sortants    |
-|  Next.js / React  | HTTP  |   Use Cases       |       | Repositories, etc. |
-+-------------------+       +---------+---------+       +---------+---------+
-                                       |                           |
-                                       v                           v
-                              +------------------+          +------------------+
-                              |      Domain      |          | Infrastructure   |
-                              | Entités / règles |          | Postgres/Auth    |
-                              +------------------+          | Logs / IDs       |
-                                                            +------------------+
+```mermaid
+flowchart LR
+  U[Administrateur] --> R[React TypeScript]
+  R --> B[API et BFF .NET]
+  B --> K[Keycloak]
+  B --> A[Cas d'usage et ports]
+  W[Worker .NET] --> A
+  A --> D[Domaine et calculs purs]
+  A --> P[Adaptateurs PostgreSQL]
+  P --> DB[(PostgreSQL : métier, file, outbox)]
+  A --> S[Adaptateur fichiers]
+  S --> O[(Objets S3 privés)]
+  W --> E[Adaptateurs d'exécution]
+  E --> EXT[Environnements d'agents externes]
+  E --> L[Agent piloté par le worker]
+  L --> M[Adaptateurs de modèles API]
+  EXT --> H[HTTP JSON ou MCP]
+  H --> A
 ```
 
-## 2. Règle fondamentale de dépendance
+Le diagramme représente les échanges à l'exécution. Les dépendances de code pointent vers les interfaces internes, jamais depuis le domaine vers un adaptateur.
 
-Toutes les dépendances de code pointent vers l’intérieur. Le domaine ignore l’existence de Next.js, Supabase, Vercel, ChatGPT, HTTP et PostgreSQL. L’application connaît le domaine et définit les ports dont elle a besoin. L’infrastructure et la présentation implémentent ou appellent ces ports.
+## 3. Frontières de code
 
-| Couche | Contient | Ne contient pas |
+| Couche | Responsabilité | Dépendances autorisées |
 | --- | --- | --- |
-| Domain | Entités, value objects, politiques métier, calculateurs purs, erreurs métier. | I/O, DTO HTTP, SQL, SDK, composants React. |
-| Application | Use cases, commandes/requêtes, ports, orchestration transactionnelle. | Détails Supabase, composants UI, requêtes SQL concrètes. |
-| Adapters inbound | Route handlers, contrôleurs, presenters, mapping DTO → commande. | Règles financières ou déduplication métier. |
-| Adapters outbound | Repositories Postgres, auth provider, logger, clock, UUID. | Décisions métier. |
-| Composition root | Assemblage des implémentations et injection des dépendances. | Règles fonctionnelles. |
+| Domaine | Entités, invariants, conformité, finance, scoring et politiques pures. | Bibliothèque standard ; aucun framework technique. |
+| Application | Cas d'usage, transactions logiques, ports, coordination et autorisation métier. | Domaine et contrats internes. |
+| Contrats externes | DTO HTTP/MCP, validation syntaxique, OpenAPI/JSON Schema. | Types de sérialisation/validation, sans domaine ni persistance. |
+| Infrastructure | EF Core, SQL, S3, Keycloak/OIDC, agents/modèles, horloge et observabilité. | Ports applicatifs et domaine. |
+| Entrées | Contrôleurs, outils MCP, commandes worker ; traduction vers cas d'usage. | Application et contrats externes. |
+| Composition | Assemblage des ports et adaptateurs dans API et worker. | Infrastructure et application. |
+| Frontend | Présentation, saisie et retours utilisateur. | API typée ; aucun accès direct à PostgreSQL ou aux jetons IA. |
 
-## 3. Bounded contexts / modules
+Clean Code : langage métier, fonctions ciblées, noms explicites, invariants testés, erreurs typées, injection explicite. L'architecture ne doit pas multiplier les interfaces sans besoin de frontière ou de test. Pas de calcul de référence dans React, de services métier dans les contrôleurs ni de DTO EF exposés au domaine.
 
-| Contexte | Agrégat / concepts | Dépendances autorisées |
-| --- | --- | --- |
-| Search Operations | SearchRun, SourceRun, AgentEvent | Criteria, Listing ingestion via application services. |
-| Property Catalog | Listing, ListingSource, Snapshot | Aucune dépendance vers Evaluation au niveau domaine. |
-| Evaluation | EvaluationInput, Evaluation, ScoreBreakdown | Lit les données utiles via ports/application. |
-| Criteria | SearchCriteriaVersion, zones, thresholds | Indépendant. |
-| Identity/Audit | Actor, AuditEvent | Cross-cutting via adapters/services. |
+## 4. Modules proposés
 
-## 4. Flux architecturaux
-
-### 4.1 Flux agent → ingestion
-
-1. L’adaptateur HTTP reçoit le payload agent.
-2. Le schema contractuel valide syntaxe et types.
-3. Le contrôleur construit une commande IngestAgentBatch.
-4. Le use case vérifie idempotence, résout la source et ouvre/actualise le SourceRun.
-5. Le normaliseur produit des valeurs de domaine sûres.
-6. Le service de déduplication interroge les ports de lecture nécessaires.
-7. Les repositories enregistrent listing/snapshot dans une transaction lorsque requis.
-8. Le use case déclenche le recalcul si les champs déterminants ont changé.
-9. Les événements techniques et métier sont corrélés au run.
-10. Un presenter transforme le résultat en réponse HTTP.
-
-### 4.2 Flux UI → modification d’hypothèses
-
-1. Le formulaire UI valide superficiellement les champs pour l’ergonomie.
-2. Le serveur revalide systématiquement le contrat.
-3. Le use case CreateEvaluationInput crée une nouvelle version immuable des hypothèses.
-4. Le moteur de calcul produit une Evaluation liée à cette version.
-5. La fiche bien lit la dernière évaluation et permet d’accéder aux versions précédentes.
-
-## 5. Patterns retenus
-
-| Pattern | Usage |
+| Module | Propriété des données et responsabilité |
 | --- | --- |
-| Repository | Abstraction de la persistance par agrégat / besoin applicatif. |
-| Use Case / Application Service | Point d’entrée métier testable pour chaque action significative. |
-| Value Object | Money, Percentage, Surface, PostalCode, SourceReference, CanonicalUrl. |
-| Domain Policy | Règles de scoring, rapprochement, transitions de statut. |
-| Outbox logique (option V1.1) | Découpler recalculs/notifications si besoin de traitements asynchrones. |
-| ADR | Tracer les choix : Supabase, stratégie d’ingestion, déduplication, calculs monétaires. |
-| Idempotency Key | Rendre les imports agent rejouables et sûrs. |
+| Recherches | Critères/version, stratégie, zones, sources choisies, programmation et activation. |
+| Catalogue immobilier | Biens, lots, annonces, observations, corrections, disponibilité, rapprochement/défusion. |
+| Dossiers d'investissement | Rattachement bien–recherche, qualification, dérogations et hypothèses spécifiques. |
+| Évaluations | Instantanés d'entrée, scénarios, finance, score, historique et génération courante. |
+| Opérations agents | Tâches, tentatives, intégrations/capacités, progression, budgets, relais et arrêt. |
+| Documents | Objets, provenance, suggestions d'extraction et validation. |
+| Identité/audit | Acteurs, périmètres d'autorisation, sessions et traçabilité. |
 
-## 6. Composition du code
+Les modules restent dans le même backend et peuvent participer à une transaction PostgreSQL lorsque nécessaire. Les écritures sont coordonnées par les cas d'usage, pas par des accès libres aux tables d'un autre module. Les projections de lecture peuvent agréger plusieurs modules sans créer une seconde source de vérité.
 
-```text
-packages/domain/src/
-  listing/
-    entities/Listing.ts
-    value-objects/Surface.ts
-    policies/ListingStatusPolicy.ts
-  evaluation/
-    value-objects/Money.ts
-    calculators/cashFlow.ts
-    calculators/yield.ts
-    policies/scoringPolicy.ts
+## 5. Ports principaux
 
-packages/application/src/
-  ingestion/use-cases/IngestAgentBatch.ts
-  ingestion/ports/ListingRepository.ts
-  ingestion/ports/IngestionRequestRepository.ts
-  evaluation/use-cases/RecalculateEvaluation.ts
-  shared/ports/Clock.ts
-  shared/ports/IdGenerator.ts
+- Repositories ciblés : PropertyRepository, SearchRepository, SimulationRepository, TaskRepository.
+- UnitOfWork/TransactionBoundary : transaction courte, sans fuite de DbContext.
+- JobQueue et Outbox : création durable, réservation, renouvellement de bail, invalidation et reprise.
+- AgentExecutor : déclenchement, récupération d'état et arrêt selon capacités déclarées ; expose clairement Unsupported/Unknown lorsque nécessaire.
+- ModelGateway : appel de modèle pour les agents pilotés par le worker, outils/vision/sortie structurée et usage selon fournisseur.
+- PrivateObjectStore : dépôt, intégrité, lecture autorisée et cycle des fichiers.
+- IdentityProvider/ActorContext : identité normalisée ; aucune dépendance métier au SDK Keycloak.
+- SecretStore, Clock, IdGenerator, AuditTrail, UsageMeter : accès techniques contrôlés.
 
-packages/infrastructure/src/
-  postgres/PostgresListingRepository.ts
-  postgres/PostgresSearchRunRepository.ts
-  auth/SupabaseIdentityAdapter.ts
-  logging/PinoLoggerAdapter.ts
+Les adaptateurs peuvent être remplacés sans modifier les règles financières. Remplacer un environnement d'agent peut modifier ses capacités ; l'interface ne doit pas masquer cette différence sous un faux équivalent fonctionnel.
 
-apps/web/src/
-  app/(authenticated)/...
-  app/api/v1/agent-ingestion/route.ts
-  server/composition/createContainer.ts
-  server/http/mapErrorToResponse.ts
+## 6. Flux fiables
+
+### Demande de recherche
+
+API → vérifier identité/activation/exécution active → figer critères → enregistrer run et tâche → retour à l'interface. Worker → réserver capacité/budget et tentative → appeler l'agent → recevoir lots/progression via les mêmes cas d'usage. Le planificateur suit cette même entrée ; il ne contourne pas les contrôles.
+
+### Réception d'un lot
+
+Authentification → autorisation de tentative → validation de l'enveloppe → idempotence → validation par item → transaction des résultats/compteurs/reçus/outbox → accusé. Les fichiers S3 suivent une finalisation distincte ; aucune transaction distribuée n'est supposée.
+
+### Recalcul
+
+Changement de fait/hypothèse → génération cible et outbox en transaction → calcul pur dans le worker → écriture immuable → promotion seulement si génération toujours courante. Les anciens résultats restent consultables et explicitement obsolètes.
+
+### Relais ou annulation
+
+Invalider le droit d'écriture de la tentative précédente → demander son arrêt si possible → conserver les effets déjà acquis → reprendre ou relayer selon capacités/budget. Un fournisseur peut encore facturer un appel engagé. Une réponse réseau ambiguë nécessite réconciliation, pas répétition aveugle.
+
+## 7. Déploiement initial
+
+```mermaid
+flowchart TB
+  NET[HTTPS] --> RP[Reverse proxy TLS]
+  subgraph VPS[Serveur privé Docker]
+    RP --> WEB[Frontend React statique]
+    RP --> API[API et BFF .NET]
+    RP --> KC[Keycloak]
+    API --> PG[(PostgreSQL)]
+    WK[Worker .NET] --> PG
+    KC --> KDB[(Base Keycloak)]
+  end
+  API --> S3[(Fichiers S3 privés)]
+  WK --> S3
+  WK --> AG[Agents et API externes]
+  VPS --> BK[(Sauvegardes chiffrées hors serveur)]
+  S3 --> BK
 ```
 
-## 7. Architecture de données
+**Proposition de réalisation :** Docker Compose, reverse proxy TLS, même origine web/API pour simplifier BFF/CSRF. PostgreSQL peut héberger deux bases/rôles séparés, ImmoTrack et Keycloak, sur une même instance. Les conteneurs et volumes sont distincts ; la base n'est pas exposée publiquement. Aucun orchestrateur Kubernetes requis en V1.
 
-- PostgreSQL est la source de vérité persistante.
-- Les snapshots sont append-only ; une correction utilisateur crée une nouvelle donnée/version plutôt qu’une réécriture silencieuse de l’historique observé.
-- Les données brutes utiles peuvent être conservées en JSONB, mais les champs utilisés pour filtrage et calcul sont normalisés en colonnes ou projections dédiées.
-- Les contraintes DB (FK, UNIQUE, CHECK) complètent les invariants du domaine ; elles ne les remplacent pas.
-- Les migrations sont versionnées dans Git et testées sur une base locale avant production.
+La file PostgreSQL et l'outbox évitent un broker supplémentaire. Le worker et l'API ont limites de ressources séparées. Pas d'inférence de gros modèles hébergée sur ce VPS dans le chiffrage initial ; les modèles sont appelés via leurs services. Une collecte navigateur locale éventuelle fait l'objet d'un test mémoire/CPU avec concurrence bornée.
 
-## 8. Architecture d’authentification et autorisation
+Un serveur unique est un point de panne commun accepté au regard du RTO de 24 h. Cela ne constitue pas une haute disponibilité. Le stockage sans expiration exige un suivi du volume ; le plafond de 20 €/mois n'est pas une garantie de capacité infinie. Le candidat d'hébergement et les hypothèses de coût sont documentés dans le document 06.
 
-- Utilisateur humain : Supabase Auth, session SSR sécurisée, accès administrateur unique en V1.
-- Agent : credential distinct de l’utilisateur humain, révocable et rotatif. La première V1 peut utiliser une page d’ingestion technique avec secret dédié afin de rester compatible avec un navigateur agent ; cette décision doit être isolée derrière AgentAuthenticator.
-- Ne jamais utiliser la clé service_role dans le navigateur.
-- RLS et permissions DB configurées en défense en profondeur.
-- Prévoir une migration ultérieure vers OAuth/MCP ou API machine-to-machine si le canal agent évolue.
+## 8. Sécurité et reprise
 
-## 9. Observabilité
+Keycloak MFA et compte administrateur explicitement autorisé ; BFF conserve les jetons, cookie HttpOnly/Secure et CSRF. Chaque intégration possède une identité technique révocable et des permissions limitées. Les secrets fournisseurs sont chiffrés côté serveur, clé distincte de la base et procédure de rotation/restauration.
 
-| Signal | Exigence |
+Stockage objets privé, accès temporaire autorisé ; provenance et intégrité vérifiées. Les pages web/documents sont des entrées non fiables, sans pouvoir de modifier les règles d'autorisation ou les instructions de collecte. Les tâches n'ont ni accès arbitraire à la base ni secrets de toutes les intégrations.
+
+Sauvegarde quotidienne : données ImmoTrack, identité Keycloak, fichiers et clés nécessaires, avec manifestes de cohérence. Conservation 30 jours quotidiens et un an mensuel. Restaurer sur un environnement local isolé pour vérifier RPO/RTO, clés et références de fichiers. Révoquer les anciennes tentatives/sessions avant remise en service.
+
+## 9. Livraison et évolution
+
+Développement local complet et production. CI vérifie code, dépendances, calculs, contrats, transactions et migrations ; build immuable. Déploiement manuel automatisé, courte maintenance, sauvegarde, migration contrôlée et smoke test. Le retour applicatif doit être compatible avec la migration ; sinon utiliser une restauration explicitement prévue.
+
+Migration future possible vers PostgreSQL managé, stockage autre fournisseur ou worker sur une autre machine. Le passage éventuel à un broker ou à des services séparés repose sur un besoin mesuré, sans être requis pour livrer la V1.
+
+## 10. Décisions d'architecture à tracer
+
+| ADR | Décision / origine |
 | --- | --- |
-| Logs | JSON structuré, level, timestamp, correlationId, runId, sourceCode, eventType. |
-| Métriques applicatives | Durée run, annonces vues/créées/mises à jour/rejetées, erreurs par source. |
-| Audit | Actions administrateur modifiant hypothèses, statut ou données. |
-| Erreurs | Code stable + message sûr côté UI ; stack et cause dans logs serveur. |
-| Traçabilité | Possibilité de partir d’un run et retrouver chaque ingestion, listing et évaluation liés. |
+| ADR-001 | Monolithe modulaire hexagonal .NET, React TypeScript — Q101/Q104. |
+| ADR-002 | PostgreSQL, EF Core écritures et lectures dédiées — Q103/Q150. |
+| ADR-003 | Worker séparé, file PostgreSQL et outbox transactionnelle — Q105/Q106/Q147/Q148. |
+| ADR-004 | Keycloak MFA, BFF et identités agents séparées — Q107–109/Q115–116. |
+| ADR-005 | Stockage S3 privé et protocole de finalisation — Q110, proposition technique. |
+| ADR-006 | Orchestrateur, exécuteurs et modèles séparés ; contrat versionné — Q145–146. |
+| ADR-007 | Idempotence, baux/générations et concurrence optimiste — Q119/Q147/Q149. |
+| ADR-008 | VPS Docker initial, sauvegardes externes et budget — Q122–127/Q151–152. |
 
-## 10. Qualité et conventions
-
-- TypeScript en mode strict ; éviter any et casts non justifiés.
-- ESLint + Prettier ; ordre d’imports stable ; règles de frontières entre packages.
-- Nommage métier explicite plutôt que générique : IngestAgentBatch, RecalculateEvaluation, FindDuplicateCandidates.
-- Fonctions courtes ; side effects confinés aux adaptateurs.
-- Pas de singleton global mutable pour le domaine.
-- Pas de logique métier dans les composants React, Route Handlers, repositories ou migrations.
-- Commentaires réservés aux raisons non évidentes, pas à la paraphrase du code.
-- PR petites et verticales ; chaque modification métier significative accompagnée de tests.
-
-## 11. Résilience et performance
-
-- Ingestion batchée avec limite configurable afin d’éviter les timeouts serverless.
-- Idempotence obligatoire pour les retries.
-- Indexes sur source_reference, canonical_hash, city/postal_code, observed_at et clés de run.
-- Transactions limitées aux groupes d’écritures nécessitant atomicité.
-- Pas de traitement lourd synchrone non borné dans une requête HTTP ; si le volume augmente, introduire une queue/outbox sans modifier le domaine.
-
-## 12. ADR initiaux à créer
-
-| ADR | Décision |
-| --- | --- |
-| ADR-001 | Monolithe modulaire + architecture hexagonale plutôt que microservices. |
-| ADR-002 | Next.js/Vercel comme adaptateur web et runtime V1. |
-| ADR-003 | Supabase pour PostgreSQL + Auth ; accès DB confiné à infrastructure. |
-| ADR-004 | Ingestion ChatGPT/agent via contrat JSON versionné et idempotent. |
-| ADR-005 | Calculs financiers déterministes hors LLM. |
-| ADR-006 | Snapshots immuables des annonces et versionnement des hypothèses. |
-
-## 13. Chemin d’évolution
-
-- Remplacer ChatGPT Work par des agents API : nouvel adaptateur entrant, cas d’usage inchangés.
-- Remplacer Supabase par PostgreSQL managé ailleurs : nouveaux adaptateurs/reconfiguration, domaine inchangé.
-- Ajouter un worker/queue : déplacer les traitements asynchrones derrière un port JobScheduler.
-- Ajouter multi-utilisateur : étendre Identity et ownership sans réécrire les calculateurs.
-- Extraire un microservice seulement si un besoin opérationnel réel apparaît (charge, cycle de vie ou ownership distinct).
+Ces ADR sont résumés ici ; les preuves et détails de bibliothèque seront ajoutés lors des tranches techniques. Les essais d'intégration Work/API et de restauration restent des conditions de recette, pas des acquis.

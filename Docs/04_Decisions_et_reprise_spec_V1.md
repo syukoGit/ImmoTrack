@@ -1,14 +1,14 @@
 # ImmoTrack V1 — Décisions de cadrage et reprise
 
-Dernière mise à jour : 10 octobre 2026.
+Dernière mise à jour : 10 octobre 2026 — consolidation après Q152.
 
 ## Statut et mode de travail
 
-Ce document consigne les réponses validées pendant le cadrage, questions 1 à 100. Il complète les trois spécifications initiales et prévaut sur elles en cas de divergence explicitement tranchée ci-dessous. Il ne constitue pas encore la spécification finale consolidée ni une architecture validée.
+Ce journal conserve les décisions Q1–152 et leurs révisions explicites. L'objectif reste une spécification fonctionnelle étoffée et une architecture claire, en .NET et React TypeScript. Les décisions utilisateur priment sur toute proposition de réalisation.
 
-L’utilisateur approuve le socle décrit dans le README. Son objectif est une **spécification finale V1 étoffée accompagnée d’un plan d’architecture clair et concis**. Le travail se fait **une question à la fois**, avec des options et une recommandation motivée. Ne pas redemander les décisions déjà prises. Ne pas réduire silencieusement le périmètre retenu, même lorsqu’il dépasse la recommandation initiale.
+Le travail d'arbitrage se fait une question à la fois, avec recommandation motivée. Ne pas redemander les décisions prises, ni réduire silencieusement le périmètre. Les specs initiales du 3 octobre ont été réécrites après cet entretien. Les points de faisabilité restant à tester sont signalés ; ils ne constituent pas des fonctionnalités vérifiées.
 
-Le passage à l’architecture a été **explicitement annoncé après la réponse à la question 100**. La question 101 a été posée mais **n’a pas reçu de réponse**. L’utilisateur a demandé de sauvegarder le travail pour faire lui-même un commit et reprendre plus tard. Aucun commit n’a été demandé à l’assistant.
+Les tableaux Q1–100 ci-dessous sont conservés comme historique. Pour les règles actuelles, appliquer la section « Révisions qui priment sur les décisions antérieures ».
 
 ## Décisions validées — questions 1 à 100
 
@@ -146,38 +146,93 @@ Les lettres sont les réponses choisies. Les précisions ci-dessous reprennent l
 | 99 | A | Si la donnée concernée change, exception à confirmer de nouveau ; retrait du classement conforme entre-temps. |
 | 100 | C | ChatGPT Work prioritaire ; agent par API possible si les automatisations l’exigent. Assouplit l’interdiction initiale de consommation d’API LLM. Les calculs métier restent déterministes dans ImmoTrack. |
 
-## Point de reprise exact
+## Décisions validées — questions 101 à 152
 
-**Reprendre à la question 101, sans considérer la recommandation comme acceptée.** Le passage à l’architecture a déjà été annoncé ; un bref rappel suffit.
+Les lettres désignent les réponses effectivement retenues, y compris les choix formulés librement. Les recommandations non retenues ne sont pas des décisions.
 
-> Question 101 — Souhaites-tu conserver la stack proposée dans les documents actuels ?
->
-> - **A.** Oui : TypeScript, Next.js sur Vercel, PostgreSQL et authentification via Supabase. Les traitements longs des agents auront un composant d’exécution adapté.
-> - **B.** Réexaminer aussi cette stack avant de la retenir.
->
-> Recommandation présentée : **A**, pour conserver le socle validé et concentrer les décisions sur l’orchestration des agents et la fiabilité des traitements.
+| N° | Choix | Décision |
+| --- | --- | --- |
+| 101 | B + précision | Réexaminer la stack. Backend .NET, frontend React TypeScript. Révision explicite de Q100 : plusieurs environnements d'agents et modèles dès la V1, dont ChatGPT Work et agents par API, sans priorité imposée à Work. Chaque intégration reste soumise à ses capacités réelles. |
+| 102 | C | Garder une architecture déployable sur services managés ou serveur privé Docker. Le premier déploiement est précisé en Q152. |
+| 103 | A | PostgreSQL. |
+| 104 | A + précision | Monolithe modulaire .NET, architecture hexagonale et Clean Code obligatoires. Domaine indépendant des frameworks, de la persistance et des fournisseurs IA. |
+| 105 | A | Worker .NET dans un processus séparé de l'API, partageant les modules applicatifs nécessaires. |
+| 106 | A | File de tâches persistante PostgreSQL, derrière une interface. |
+| 107 | Choix libre | Keycloak pour l'authentification humaine ; possibilité de fédérer ultérieurement Microsoft, Google ou Auth0 via les protocoles supportés. |
+| 108 | A | Compte local Keycloak avec mot de passe et double authentification au lancement ; administrateur explicitement autorisé. |
+| 109 | A | BFF .NET : jetons côté serveur, cookie sécurisé HttpOnly, protection CSRF. |
+| 110 | A | Stockage objet privé compatible S3 ; métadonnées et provenance dans PostgreSQL, accès derrière un port. |
+| 111 | A | Agent par défaut, personnalisable par type de tâche et recherche ; seuls les agents compatibles avec la tâche sont proposés. |
+| 112 | B | Relais automatique configurable par liste ordonnée d'agents autorisés ; sans configuration, relais manuel. Résultats conservés ; reprise exacte entre agents non garantie. |
+| 113 | A | Budget mensuel global pour API payantes et plafond par tâche partagé entre tentatives et relais. Suspension des nouveaux traitements payants concernés et alerte à l'atteinte. Un appel engagé peut encore coûter. Montants à configurer. |
+| 114 | A | Administration des intégrations, modèles, identifiants et relais dans ImmoTrack ; secrets protégés côté serveur. Un nouveau protocole peut nécessiter du code. |
+| 115 | A | Actions agent encadrées : observations, estimations sourcées, propositions documentaires. Pas de modification autonome des critères, hypothèses manuelles ou qualification. |
+| 116 | A | Identité technique distincte par intégration, droits limités et révocation indépendante de la session humaine. |
+| 117 | A | Limites de concurrence globales et par intégration, attente de capacité ; une seule exécution active par recherche. |
+| 118 | A | Priorité aux demandes manuelles en attente, sans préemption des tâches en cours et sans attente indéfinie du programmé. |
+| 119 | A | Délais d'inactivité et de durée totale par intégration/type de tâche, détection des blocages, reprise/relais configurés et invalidation des anciennes tentatives. |
+| 120 | B | Suivi synthétique et chronologie détaillée : tentatives, relais, sources, incidents, consommation connue. Aucun secret ni raisonnement interne des modèles. |
+| 121 | C | Rétention des journaux techniques configurable, 90 jours par défaut. Pas d'expiration des données métier et de leur provenance. |
+| 122 | A | Sauvegarde quotidienne chiffrée sur stockage distinct : PostgreSQL, fichiers et données/configuration Keycloak. Tests de restauration ; objectif de perte maximale de 24 h. |
+| 123 | B | 30 jours de sauvegardes quotidiennes et une sauvegarde mensuelle pendant un an. |
+| 124 | A | Objectif de remise en service sous 24 h, procédure documentée et testée. |
+| 125 | A | Développement local et production ; pas de préproduction permanente prévue. |
+| 126 | A | Déclenchement manuel du déploiement après contrôles automatisés ; exécution du déploiement automatisée. |
+| 127 | A | Courte maintenance annoncée, nouveaux traitements suspendus, arrêt/reprise sûre des tâches et vérification après déploiement. |
+| 128 | A | Tout bien contient un ou plusieurs lots ; maison/appartement à lot unique. Loyers, occupation et mode de location par lot ; acquisition, financement et dépenses communes au bien/projet. |
+| 129 | A | Revenu global conservé tant que le détail des loyers par lot est incomplet ; ne pas additionner global et détail. Simulation provisoire. |
+| 130 | B | Si le détail complet diffère du global, validation manuelle avant bascule ; global conservé entre-temps, avec signalement et simulation provisoire. |
+| 131 | A | Année stabilisée théorique, tous les lots destinés à la location disponibles après travaux ; vacance, impayés et saisonnalité conservés. Projection distincte du démarrage réel. |
+| 132 | A | Charge de crédit stabilisée : douze mensualités normales après différé. Assurance sur capital restant dû : douze premiers mois d'amortissement comme référence. |
+| 133 | A | Crédit inchangé dans le dégradé ; dépassement de travaux couvert par fonds personnels/réserve, sans supposer un prêt supplémentaire. |
+| 134 | A | Rendement net = revenu annuel net d'exploitation / coût total × 100. Déduire vacance, impayés et dépenses supportées par le propriétaire. Crédit/assurance emprunteur dans cash-flow, pas rendement ; travaux initiaux au coût total, sans double déduction. Rendement sur prix d'achat aussi affiché. |
+| 135 | A | Besoin de réserve = déficit cumulé maximal après apport et crédit, avant réserve disponible. Flux : achat/frais/travaux/mobilier/charges/crédit et recettes. Comparer à la réserve saisie séparément. |
+| 136 | A | Dégradé par défaut : loyers longue durée −10 %, vacance +2 semaines/an, nuitée −10 %, occupation saisonnière −10 points, dépenses d'exploitation propriétaire +10 %, travaux +15 %. Écarts cumulés, configurables et ajustables ; inconnus restent inconnus, financement inchangé. |
+| 137 | A | Score fondé sur objectifs fixes de la recherche, indépendant des autres biens trouvés. |
+| 138 | A | Poids initiaux : rendement net sur coût total 40 %, cash-flow mensuel stabilisé 40 %, demande locale 20 %. Poids modifiables ; demande locative/touristique selon usage. |
+| 139 | A | Notes financières linéaires entre niveau bas = 0 et cible = 100, bornées à [0,100] ; repères configurables distincts des critères éliminatoires. Les exemples 3 %/8 % étaient illustratifs, pas des valeurs par défaut validées. |
+| 140 | A | Demande locale sur cinq niveaux 0/25/50/75/100, justification et sources datées ; grille locative/touristique distincte. Preuves insuffisantes = inconnu. |
+| 141 | C1 + recommandations | Dimension manquante imputée à 50/100 uniquement dans le score. Badge provisoire, part pondérée documentée ; pas de données financières inventées. Aucune dimension de poids non nul connue = non calculable. Critère éliminatoire inconnu = à vérifier. Remplace la restriction de Q13. |
+| 142 | B | Scores complets et provisoires dans un classement commun avec badge et part documentée. Maintenir les séparations conforme/à vérifier et stratégies/saisonnier mixte. |
+| 143 | A | Loyer longue durée estimé par agent : au moins trois biens comparables distincts, références de moins de six mois, sources consultables, justification des écarts. Distinguer loyers annoncés/pratiqués. À défaut, inconnu ; hypothèse manuelle possible. |
+| 144 | B | Autoriser aussi l'estimation d'occupation saisonnière à partir des calendriers publics, avec incertitude, méthode et sources. Distinguer indisponibilité observée et occupation payante estimée ; simulation provisoire. |
+| 145 | A | Séparer orchestrateur ImmoTrack, adaptateurs d'exécution et adaptateurs de modèles pour les agents pilotés par le worker. Déclarer capacités réelles. |
+| 146 | A | Contrat commun mission/suivi/résultats/fin via API HTTP JSON versionnée. Adaptateur MCP lorsque nécessaire et supporté, mêmes cas d'usage. |
+| 147 | A | Clé d'idempotence par envoi : rejeu identique sans nouveaux effets, contenu différent en conflit. Lot valide : rejets individuels. Résultats acceptés, compteurs et demandes de recalcul enregistrés atomiquement. |
+| 148 | A | Recalculs multiples en arrière-plan, anciens résultats marqués obsolètes. Évaluation liée aux versions exactes ; une génération ancienne ne remplace jamais une plus récente. |
+| 149 | A | Concurrence optimiste : refuser une modification basée sur une version dépassée, présenter valeur actuelle et proposition. Observations agent historisées séparément. |
+| 150 | A | EF Core pour écritures/migrations, lectures dédiées optimisables en SQL ; persistance dans les adaptateurs uniquement. Même base, sans base de lecture séparée. |
+| 151 | A | Plafond d'infrastructure de 20 €/mois hors API IA, incluant serveur, fichiers, sauvegardes, PostgreSQL et Keycloak. Faisabilité tarifaire/capacité à vérifier. |
+| 152 | A | Premier déploiement sur un serveur privé Docker : API, frontend, worker, PostgreSQL, Keycloak distincts ; sauvegardes externes, fichiers compatibles S3. Pas de fournisseur acheté ou définitivement choisi. |
 
-**Réponse en attente.** Aucun hébergeur de worker, système de queue, fournisseur/modèle API ni mécanisme de déclenchement ChatGPT Work n’a été choisi ou vérifié. Ne pas présenter le déclenchement direct de ChatGPT Work depuis ImmoTrack comme une capacité acquise.
+## Révisions qui priment sur les décisions antérieures
 
-## Travail restant pour aboutir à la spec finale
+- Q101 révise Q100 : plus de priorité imposée à ChatGPT Work et plus d'interdiction des API IA. Compatibilité dès V1 par adaptateurs, pas promesse de prise en charge universelle de tout modèle.
+- Q101–110 et Q150 remplacent Next.js, Vercel et Supabase comme cible de la V1.
+- Q141–142 révisent Q13 sur les scores partiels ; simulation, conformité et score demeurent trois états distincts.
+- Q144 précise Q44 : les calendriers publics constituent une base autorisée pour une estimation incertaine, jamais une preuve directe d'occupation.
+- Q148 précise Q11 : recalcul automatique asynchrone, avec signalement d'obsolescence.
+- Q152 précise Q102 pour le premier hébergement, sans abandonner la portabilité.
 
-Ces éléments sont des sujets de travail, **pas de nouvelles décisions approuvées**.
+## Point de reprise
 
-1. Valider ou réexaminer la stack via Q101, puis poursuivre l’entretien une question à la fois.
-2. Vérifier les possibilités réelles de ChatGPT Work et des agents API : commandes depuis ImmoTrack, exécution planifiée sans intervention, navigation/collecte, accès aux documents, suivi, annulation et remontée des résultats. Définir les limites et le recours à l’API sans promettre un basculement transparent non vérifié.
-3. Définir l’orchestration des tâches longues : planification Europe/Paris et changements d’heure, file durable, worker, progression, reprise, annulation, verrouillage par recherche, rattrapage et limites de concurrence/coût. Distinguer autonomie des recherches et absence de concurrence sur une même recherche.
-4. Adapter le modèle métier : bien, annonce, observation/snapshot, lot, recherche versionnée, rattachement bien–recherche, qualification, simulation/scénarios, corrections, dérogations, pièces jointes, suggestions documentaires et opérations agent. Distinguer faits partagés et hypothèses propres à une recherche.
-5. Formaliser les contrats et transactions : enveloppe invalide versus annonce rejetée, lots partiels, statuts/transitions, idempotence (clé, durée, contenu différent, concurrence), reprise après crash et compteurs fiables.
-6. Spécifier précisément rapprochement/défusion, provenance et ordre des valeurs, seuils de confiance, égalité des dates, critères de retrait d’annonce et actualisation d’un même bien suivi dans plusieurs recherches.
-7. Définir formules financières, unités, assiettes, arrondis, hypothèses par défaut, scoring et preuves minimales des estimations/demandes locales. Résoudre notamment l’articulation revenu global/détail par lot, année stabilisée, différé et mensualité, réserve versus capital travaux, frais récupérables et saisonnalité. Préparer exemples chiffrés vérifiables (achat comptant, taux nul, données manquantes, immeuble mixte, démarrage long).
-8. Définir autorisations administrateur/agents, secrets, stockage privé des médias/documents, sauvegardes et restauration, rétention technique, quotas d’infrastructure et observabilité. La conservation métier sans expiration ne signifie pas stockage techniquement illimité.
-9. Consolider les trois spécifications existantes et leur cohérence avec toutes les décisions ci-dessus. Produire un plan d’architecture clair et concis, les contrats nécessaires et un ordre de réalisation testable. Ne pas présenter ce journal seul comme la spec finale terminée.
+La série s'est terminée après Q152, acceptée. Aucune question posée ne reste sans réponse.
+La consolidation locale est rédigée dans les documents 01 à 06. Les conventions de réalisation ajoutées par l'assistant sont identifiées comme propositions ou paramètres techniques ; elles ne sont pas présentées comme de nouveaux choix utilisateur.
 
-## Fichiers de référence
+Prochaine étape utile : relire les specs consolidées, puis réaliser les preuves techniques décrites dans [Faisabilité et réalisation](06_Faisabilite_et_realisation_V1.md). Ne pas recommencer l'entretien Q1–152. Aucun développement applicatif, déploiement ni abonnement n'a été effectué pendant cette consolidation.
 
-- [README et points ouverts initiaux](README.md)
-- [Spécification fonctionnelle initiale](01_Specification_fonctionnelle_ImmoTrack_V1.md)
-- [Spécification technique initiale](02_Specification_technique_ImmoTrack_V1.md)
-- [Spécification d’architecture initiale](03_Specification_architecture_ImmoTrack_V1.md)
+## Paramètres et preuves restant à finaliser
 
-Les documents initiaux sont conservés comme base ; ils n’ont pas encore été réécrits pour intégrer l’entretien. Lire ce journal avant de s’appuyer sur leurs restrictions ou leur modèle de données.
+- Activation réelle du plugin MCP Events/Work sur le compte de l'utilisateur ; progression, annulation et coûts disponibles ; premier fournisseur API et modèle de référence.
+- Devis d'infrastructure total et disponibilité, dimensionnement mesuré, stockage et sauvegardes. Aucun prix historique ne vaut engagement de coût.
+- Montants des budgets IA, repères de scoring par recherche, hypothèses financières inconnues et fréquences d'actualisation par statut à saisir dans la configuration. Ne pas inventer ces préférences.
+- Matrice complète des critères et rubriques probatoires de demande locative/touristique, ainsi que l'agrégation de cette demande pour un immeuble mixte : propositions à évaluer sur un jeu de biens.
+- Recette des conventions de calcul, cas limites, reprise, migrations, restauration et exécution multi-fournisseur.
+
+## Références
+
+- [Spécification fonctionnelle](01_Specification_fonctionnelle_ImmoTrack_V1.md)
+- [Spécification technique](02_Specification_technique_ImmoTrack_V1.md)
+- [Architecture](03_Specification_architecture_ImmoTrack_V1.md)
+- [Calculs et cas de référence](05_Calculs_et_cas_de_reference_V1.md)
+- [Faisabilité et réalisation](06_Faisabilite_et_realisation_V1.md)
